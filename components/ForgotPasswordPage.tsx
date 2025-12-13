@@ -46,7 +46,7 @@ const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onBackToLogin }
           <img 
             alt="Cursinho Comunitário Bonsucesso logo" 
             className="h-12 w-auto"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhSDtHDpdeJXLcolK0EB8X3LfE3OSaQfvoTO6hRLkwrWhAe7NM_CYaBd0GaLe63u3-lobyhpay51bvrqpGjkjLdzPOV0JUAvxbAkcF-hAemDJorCtoLJEyh6Iss9qcVdPd5BWKnSZcHFeccAHhqSIaQ8b2zBURA8SrwxaPnOIs6i0qO9HslOdLVxtqu8KnmFpt7HPBmjE70RDBUIvvqEwJHTKLBTvztITae1Pd0q79Iu-jtb7N_I_6316AnVZ-DKhtTCqT8orfbQ"
+            src="https://fnfybutkvsozbvvacomo.supabase.co/storage/v1/object/public/imagens%20para%20plataforma/logo.png"
           />
         </div>
 

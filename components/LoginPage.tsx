@@ -24,14 +24,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
       });
 
       if (error) {
-        // Tratamento básico de mensagens de erro
         if (error.message.includes('Invalid login credentials')) {
             setErrorMsg('Email ou senha incorretos.');
         } else {
             setErrorMsg(error.message);
         }
       }
-      // O redirecionamento é tratado automaticamente pelo onAuthStateChange no App.tsx
     } catch (err) {
       setErrorMsg('Ocorreu um erro inesperado ao tentar entrar.');
       console.error(err);
@@ -41,74 +39,100 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark p-4">
-      <div className="bg-white dark:bg-surface-dark rounded-2xl shadow-xl w-full max-w-md p-8 sm:p-10 border border-gray-100 dark:border-gray-700">
-        
-        {/* Logo Section */}
-        <div className="flex justify-center mb-8">
-          <img 
-            alt="Cursinho Comunitário Bonsucesso logo" 
-            className="h-16 w-auto"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhSDtHDpdeJXLcolK0EB8X3LfE3OSaQfvoTO6hRLkwrWhAe7NM_CYaBd0GaLe63u3-lobyhpay51bvrqpGjkjLdzPOV0JUAvxbAkcF-hAemDJorCtoLJEyh6Iss9qcVdPd5BWKnSZcHFeccAHhqSIaQ8b2zBURA8SrwxaPnOIs6i0qO9HslOdLVxtqu8KnmFpt7HPBmjE70RDBUIvvqEwJHTKLBTvztITae1Pd0q79Iu-jtb7N_I_6316AnVZ-DKhtTCqT8orfbQ"
-          />
-        </div>
+    <div className="min-h-screen w-full flex flex-col md:flex-row font-display">
+      {/* Estilos para a animação do gradiente */}
+      <style>{`
+        @keyframes gradientAnimation {
+          0% { background-position: 0% 0%; }
+          50% { background-position: 100% 100%; }
+          100% { background-position: 0% 0%; }
+        }
+        .animated-gradient-bg {
+          background: linear-gradient(
+            135deg,
+            #0044cc, /* Azul mais intenso e elétrico */
+            #00a844, /* Verde mais vivo */
+            #ffbb00, /* Amarelo/Ouro bem brilhante */
+            #e62e2e  /* Vermelho puro e forte */
+          );
+          background-size: 300% 300%;
+          animation: gradientAnimation 12s ease infinite;
+        }
+      `}</style>
 
-        <h2 className="text-3xl font-bold text-center text-brand-dark-blue dark:text-white mb-2">Bem-vindo</h2>
-        <p className="text-center text-gray-500 dark:text-gray-400 mb-8">Insira suas credenciais para acessar a plataforma.</p>
+      {/* Lado Esquerdo: Animado com Logo */}
+      <div className="animated-gradient-bg w-full md:w-1/2 h-48 md:h-auto flex items-center justify-center p-8 shadow-lg z-10">
+        <img 
+          alt="Cursinho Comunitário Bonsucesso logo" 
+          className="max-h-full max-w-[60%] md:max-w-[50%] h-auto object-contain filter brightness-0 invert drop-shadow-md"
+          src="https://fnfybutkvsozbvvacomo.supabase.co/storage/v1/object/public/imagens%20para%20plataforma/logo.png"
+        />
+      </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
-          <FormField 
-            id="email" 
-            label="E-mail" 
-            type="email" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
-          />
+      {/* Lado Direito: Formulário */}
+      <div className="w-full md:w-1/2 flex items-center justify-center bg-[#f5f7fa] p-4 sm:p-8">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 sm:p-10 border border-gray-100">
           
-          <FormField 
-            id="password" 
-            label="Senha" 
-            type="password" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-          />
+          <h2 className="text-3xl font-bold text-center text-[#0044cc] mb-2">Bem-vindo</h2>
+          <p className="text-center text-gray-500 mb-8">Insira suas credenciais para acessar a plataforma.</p>
 
-          {errorMsg && (
-            <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm text-center font-medium border border-red-200 dark:border-red-800">
-              {errorMsg}
-            </div>
-          )}
+          <form onSubmit={handleLogin} className="space-y-6">
+            <FormField 
+              id="email" 
+              label="E-mail" 
+              type="email" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)}
+              // Força o fundo branco no label flutuante para combinar com o card
+              containerClassName="bg-white" 
+            />
+            
+            <FormField 
+              id="password" 
+              label="Senha" 
+              type="password" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)}
+              containerClassName="bg-white"
+            />
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-brand-dark-blue hover:bg-opacity-90 text-white font-bold py-3 px-4 rounded-full transition-all transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center shadow-md"
-          >
-            {loading ? (
-               <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
-            ) : (
-              'ENTRAR'
+            {errorMsg && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center font-medium border border-red-200">
+                {errorMsg}
+              </div>
             )}
-          </button>
-        </form>
 
-        <div className="mt-8 text-center space-y-2">
-            <div>
-                <button 
-                  onClick={onForgotPassword}
-                  className="text-sm text-gray-500 hover:text-brand-dark-blue dark:hover:text-white transition-colors focus:outline-none"
-                >
-                    Esqueceu sua senha?
-                </button>
-            </div>
-            <div>
-                <p className="text-sm text-gray-500">
-                    Ainda não tem cadastro?{' '}
-                    <a href="#" className="font-bold text-brand-dark-blue dark:text-indigo-400 hover:underline">
-                        Procure a secretaria
-                    </a>
-                </p>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#0044cc] hover:bg-opacity-90 text-white font-bold py-3 px-4 rounded-full transition-all transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center shadow-md"
+            >
+              {loading ? (
+                 <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
+              ) : (
+                'ENTRAR'
+              )}
+            </button>
+          </form>
+
+          <div className="mt-8 text-center space-y-2">
+              <div>
+                  <button 
+                    onClick={onForgotPassword}
+                    className="text-sm text-gray-500 hover:text-[#0044cc] transition-colors focus:outline-none"
+                  >
+                      Esqueceu sua senha?
+                  </button>
+              </div>
+              <div>
+                  <p className="text-sm text-gray-500">
+                      Ainda não tem cadastro?{' '}
+                      <a href="#" className="font-bold text-[#0044cc] hover:underline">
+                          Procure a secretaria
+                      </a>
+                  </p>
+              </div>
+          </div>
         </div>
       </div>
     </div>
