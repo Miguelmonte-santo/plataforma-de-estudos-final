@@ -1,0 +1,7 @@
+{
+  "name": "plataforma final que eu irei entregar",
+  "description": "Uma plataforma de estudos interativa com acesso a simulados, materiais de estudo, redação e atividades, baseada no design fornecido.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
