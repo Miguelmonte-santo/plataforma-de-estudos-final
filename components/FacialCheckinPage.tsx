@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-// Declara a variável global `faceapi` para o TypeScript, já que ela é carregada por um script no HTML.
+// Declara a variável global `faceapi`
 declare const faceapi: any;
 
 interface FacialCheckinPageProps {
@@ -55,7 +55,6 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
 
     loadModelsAndStartVideo();
 
-    // Função de limpeza para parar a câmera ao sair da página
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -64,37 +63,44 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
   }, []);
 
   const getDescritorDoAlunoLogado = async () => {
-    // Pega o usuário logado na sessão atual
+    // 1. Pega o usuário logado
     const { data: { user } } = await supabase.auth.getUser();
   
-    if (!user) {
+    if (!user || !user.email) {
       throw new Error("Nenhum usuário logado.");
     }
   
-    // Define o caminho da foto. 
-    // Ajustado para .jpeg e removendo a pasta 'selfies/' do caminho
-    const caminhoDaFoto = `${user.id}.jpeg`; 
+    console.log("Buscando foto oficial para o email:", user.email);
+
+    // 2. Busca a URL da foto OFICIAL na tabela 'alunos' (A "Matriz Biométrica")
+    // Usamos o email para vincular, pois é o dado comum entre Auth e Alunos
+    const { data: alunoData, error } = await supabase
+      .from('alunos')
+      .select('foto_rosto_url')
+      .eq('email', user.email)
+      .single();
+
+    if (error || !alunoData || !alunoData.foto_rosto_url) {
+      console.error("Erro Supabase:", error);
+      throw new Error("Foto de matrícula não encontrada. Entre em contato com a secretaria.");
+    }
   
-    // Pega a URL Pública (assumindo que o bucket 'selfies' é público)
-    const { data } = supabase.storage
-      .from('selfies')
-      .getPublicUrl(caminhoDaFoto);
-  
-    const urlFotoCadastro = data.publicUrl;
-  
-    console.log("Buscando foto de referência em:", urlFotoCadastro);
+    const urlFotoCadastro = alunoData.foto_rosto_url;
+    console.log("Foto de referência encontrada:", urlFotoCadastro);
   
     try {
+      // 3. Baixa a imagem e calcula o descritor facial
+      // O 'crossOrigin' é importante para imagens vindas do Supabase Storage
       const img = await faceapi.fetchImage(urlFotoCadastro);
       const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
   
       if (!detection) {
-        throw new Error(`Não foi possível detectar um rosto na foto de cadastro.`);
+        throw new Error(`Não foi possível detectar um rosto na foto de cadastro (Matrícula).`);
       }
       return detection.descriptor;
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      throw new Error("Erro ao carregar a foto de cadastro. O aluno possui uma selfie salva?");
+      throw new Error("Erro ao processar a foto de cadastro: " + err.message);
     }
   };
 
@@ -106,16 +112,22 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
     setStatusColor('text-orange-500');
 
     try {
+      // 1. Busca a assinatura facial da foto oficial
       const descritorSalvo = await getDescritorDoAlunoLogado();
+      
+      // 2. Lê o rosto da webcam agora
       const descritorWebcam = await faceapi.detectSingleFace(videoRef.current).withFaceLandmarks().withFaceDescriptor();
 
       if (descritorWebcam) {
+        // 3. Compara os dois
         const distancia = faceapi.euclideanDistance(descritorSalvo, descritorWebcam.descriptor);
+        console.log("Distância Euclidiana (Diferença):", distancia);
         
+        // Limiar de 0.6 é o padrão da biblioteca. Menor = Mais parecido.
         if (distancia < 0.6) {
           setStatusMessage('Identidade confirmada! Presença registrada.');
           setStatusColor('text-green-500');
-          // Aqui você chamaria uma função para salvar a presença no backend
+          // TODO: Chamar função para salvar o registro na tabela 'presencas'
         } else {
           setStatusMessage('Rosto não corresponde ao cadastro. Tente novamente.');
           setStatusColor('text-red-500');
@@ -141,7 +153,7 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
           Check-in Facial
         </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-2">
-          Olá! Olhe para a câmera e clique no botão para confirmar sua presença.
+          Validação biométrica com base na sua foto de matrícula.
         </p>
       </div>
 
