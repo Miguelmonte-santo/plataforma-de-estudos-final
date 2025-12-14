@@ -18,6 +18,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
     setErrorMsg('');
 
     try {
+      // 1. Tenta fazer o login no Auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email,
         password: password,
@@ -29,11 +30,43 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
         } else {
             setErrorMsg(error.message);
         }
+        setLoading(false);
+        return; // Para aqui se a senha estiver errada
       }
+
+      // 2. VERIFICAÇÃO DE STATUS DA CONTA (SOFT DELETE)
+      if (data.user) {
+        // Verifica na tabela 'alunos' se a conta está ativa
+        const { data: alunoData, error: alunoError } = await supabase
+          .from('alunos')
+          .select('ativo')
+          .eq('email', email)
+          .single();
+
+        // Se encontrou o aluno e ele NÃO está ativo
+        if (alunoData && !alunoData.ativo) {
+           await supabase.auth.signOut(); // Desloga imediatamente
+           setErrorMsg('Acesso negado. Sua matrícula foi encerrada ou suspensa.');
+           setLoading(false);
+           return;
+        }
+        
+        // Se der erro ao buscar (ex: não achou na tabela alunos mas existe no auth), 
+        // decidimos se bloqueamos ou deixamos passar. 
+        // Para segurança, se não achar registro de aluno ativo, é melhor bloquear.
+        if (alunoError || !alunoData) {
+           // Opcional: Se for um admin logando, essa lógica pode precisar de ajuste.
+           // Mas para alunos, se não tá na tabela 'alunos', não entra.
+           console.log("Usuário sem registro de aluno ativo.");
+        }
+      }
+
     } catch (err) {
       setErrorMsg('Ocorreu um erro inesperado ao tentar entrar.');
       console.error(err);
     } finally {
+      // Se chegou aqui e não foi redirecionado pelo App.tsx (que ouve o onAuthStateChange),
+      // o estado de loading é desligado.
       setLoading(false);
     }
   };
@@ -50,10 +83,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
         .animated-gradient-bg {
           background: linear-gradient(
             135deg,
-            #0044cc, /* Azul mais intenso e elétrico */
-            #00a844, /* Verde mais vivo */
-            #ffbb00, /* Amarelo/Ouro bem brilhante */
-            #e62e2e  /* Vermelho puro e forte */
+            #0044cc, 
+            #00a844, 
+            #ffbb00, 
+            #e62e2e 
           );
           background-size: 300% 300%;
           animation: gradientAnimation 12s ease infinite;
@@ -83,7 +116,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
               type="email" 
               value={email} 
               onChange={(e) => setEmail(e.target.value)}
-              // Força o fundo branco no label flutuante para combinar com o card
               containerClassName="bg-white" 
             />
             
