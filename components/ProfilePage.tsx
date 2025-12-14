@@ -39,13 +39,13 @@ const ProfilePage: React.FC = () => {
       if (!user) throw new Error('Nenhum usuário logado');
 
       // Busca dados do perfil
-      let { data, error, status } = await supabase
+      let { data, error } = await supabase
         .from('profiles')
         .select(`*`)
         .eq('id', user.id)
         .single();
 
-      if (error && status !== 406) {
+      if (error && error.code !== 'PGRST116') {
         throw error;
       }
 
@@ -67,15 +67,12 @@ const ProfilePage: React.FC = () => {
             uf: data.uf || '',
             cep: data.cep || '',
         });
+        
+        // Agora carregamos o AVATAR (estético), não a biometria
+        if (data.avatar_url) {
+            setAvatarUrl(`${data.avatar_url}?t=${new Date().getTime()}`);
+        }
       }
-      
-      // Busca a foto para exibir no avatar (sem cache para atualizar na hora)
-      const { data: publicUrlData } = supabase.storage
-          .from('selfies')
-          .getPublicUrl(`${user.id}.jpeg`);
-      
-      // Adicionamos um timestamp para forçar o navegador a recarregar a imagem nova
-      setAvatarUrl(`${publicUrlData.publicUrl}?t=${new Date().getTime()}`);
 
     } catch (error: any) {
       console.error('Erro ao carregar perfil:', error.message);
@@ -108,24 +105,31 @@ const ProfilePage: React.FC = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
 
-      // 1. Se tiver foto nova, faz o upload
-      if (selectedFile) {
-        // Renomeia o arquivo para o ID do usuário (sempre .jpeg para padronizar)
-        const fileExt = 'jpeg'; // Forçamos jpeg ou usamos a extensão original se preferir, mas seu checkin usa jpeg fixo.
-        const fileName = `${user.id}.${fileExt}`;
+      let publicAvatarUrl = null;
 
+      // 1. Upload da FOTO DE PERFIL (Estética - Sonic, Anime, etc)
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop();
+        // Salvamos como avatar_ID para diferenciar da biometria
+        const fileName = `avatar_${user.id}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        // Vamos salvar no mesmo bucket 'selfies' por simplicidade, mas com nome diferente
         const { error: uploadError } = await supabase.storage
           .from('selfies')
-          .upload(fileName, selectedFile, {
-            upsert: true, // Substitui se já existir
-            contentType: 'image/jpeg'
-          });
+          .upload(filePath, selectedFile, { upsert: true });
 
         if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('selfies')
+          .getPublicUrl(filePath);
+          
+        publicAvatarUrl = publicUrlData.publicUrl;
       }
 
       // 2. Atualiza os dados de texto
-      const updates = {
+      const updates: any = {
         id: user.id,
         nome: formData.nome,
         sobrenome: formData.sobrenome,
@@ -144,6 +148,11 @@ const ProfilePage: React.FC = () => {
         cep: formData.cep,
         updated_at: new Date(),
       };
+
+      // Só atualiza a URL se houve upload novo
+      if (publicAvatarUrl) {
+          updates.avatar_url = publicAvatarUrl;
+      }
 
       const { error } = await supabase.from('profiles').upsert(updates);
 
@@ -175,10 +184,7 @@ const ProfilePage: React.FC = () => {
                     alt="Avatar" 
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                        // Se der erro ao carregar a imagem (ex: 404), esconde e mostra o ícone
                         (e.target as HTMLImageElement).style.display = 'none';
-                        // Acessa o irmão (o ícone) para mostrá-lo, ou usa estado condicional. 
-                        // Simplificado: se der erro, volta a mostrar o ícone padrão
                         setAvatarUrl(null); 
                     }}
                    />
@@ -191,14 +197,17 @@ const ProfilePage: React.FC = () => {
               <input id="photo-upload" type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
             </label>
           </div>
-          <label htmlFor="photo-upload-button" className="w-full max-w-xs">
+          
+          <p className="text-gray-500 text-sm font-semibold">Foto de Perfil</p>
+          <p className="text-xs text-gray-400 text-center mt-1">(Esta foto não altera seu reconhecimento facial)</p>
+
+          <label htmlFor="photo-upload-button" className="w-full max-w-xs mt-4">
             <span className="flex items-center justify-center gap-2 bg-brand-dark-blue text-white font-bold py-3 px-4 rounded-full w-full cursor-pointer hover:bg-opacity-90 transition-colors">
               <span className="material-icons-outlined !text-xl">photo_camera</span>
               {uploading ? 'ENVIANDO...' : 'ALTERAR FOTO'}
             </span>
             <input id="photo-upload-button" type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
           </label>
-          <p className="text-xs text-gray-500 mt-2 text-center">Recomendado: Use uma foto de rosto clara (JPG/PNG) para o reconhecimento facial.</p>
         </div>
 
         {/* Form Section */}
