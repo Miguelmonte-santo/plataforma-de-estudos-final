@@ -8,9 +8,9 @@ const ProfilePage: React.FC = () => {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  // Removido 'sobrenome' do estado
   const [formData, setFormData] = useState({
-    nome: '',
-    sobrenome: '',
+    nome: '', // Será o Nome Completo
     email: '',
     dataNascimento: '',
     telefone: '',
@@ -38,8 +38,7 @@ const ProfilePage: React.FC = () => {
 
       if (data) {
         setFormData({
-            nome: data.nome || '',
-            sobrenome: data.sobrenome || '',
+            nome: data.nome || '', // Pega o nome completo salvo
             email: data.email || user.email || '',
             dataNascimento: data.data_nascimento || '',
             telefone: data.telefone || '',
@@ -65,8 +64,8 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  // Função vazia apenas para não quebrar o componente FormField
-  const handleChange = () => {}; 
+  // Função dummy para o FormField não reclamar
+  const handleChange = () => {};
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +95,6 @@ const ProfilePage: React.FC = () => {
         .from('selfies')
         .getPublicUrl(filePath);
 
-      // Atualiza SOMENTE a url da foto
       const { error } = await supabase.from('profiles').upsert({
         id: user.id,
         updated_at: new Date(),
@@ -128,7 +126,7 @@ const ProfilePage: React.FC = () => {
                    <span className="material-icons-outlined text-brand-dark-blue" style={{ fontSize: '120px' }}>person</span>
                )}
             </div>
-            <label htmlFor="photo-upload" className="absolute bottom-2 right-2 bg-brand-dark-blue text-white rounded-full p-2 cursor-pointer hover:bg-opacity-90 transition-colors">
+            <label htmlFor="photo-upload" className="absolute bottom-2 right-2 bg-brand-dark-blue text-white rounded-full p-2 cursor-pointer hover:bg-opacity-90 transition-colors" title="Alterar foto de perfil">
               <span className="material-icons-outlined !text-2xl">photo_camera</span>
               <input id="photo-upload" type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
             </label>
@@ -143,7 +141,7 @@ const ProfilePage: React.FC = () => {
           </label>
         </div>
 
-        {/* Form Section - Travado */}
+        {/* Form Section - Visualização Travada */}
         <div className="lg:col-span-2">
           <h1 className="text-4xl sm:text-5xl font-bold text-brand-dark-blue dark:text-gray-200 mb-8">Perfil do Aluno.</h1>
           <p className="text-gray-500 mb-6 text-sm">
@@ -155,23 +153,67 @@ const ProfilePage: React.FC = () => {
             <section className="mb-8">
               <h2 className="text-2xl font-semibold mb-4">Dados pessoais.</h2>
               <div className="space-y-4">
+                {/* Linha 1: Nome Completo (Ocupa toda a largura agora) */}
                 <div className="flex flex-col md:flex-row gap-x-6 gap-y-4">
-                  <FormField id="nome" label="Nome" value={formData.nome} onChange={handleChange} containerClassName="flex-1" disabled={true} />
-                  <FormField id="sobrenome" label="Sobrenome" value={formData.sobrenome} onChange={handleChange} containerClassName="flex-1" disabled={true} />
+                  <FormField 
+                    id="nome" 
+                    label="Nome Completo" 
+                    value={formData.nome} 
+                    onChange={handleChange} 
+                    containerClassName="w-full"
+                    disabled={true} 
+                  />
                 </div>
+                {/* Linha 2: Email e Data */}
                 <div className="flex flex-col md:flex-row gap-x-6 gap-y-4">
-                  <FormField id="email" label="E-mail" type="email" value={formData.email} onChange={handleChange} containerClassName="flex-[2]" disabled={true} />
-                  <FormField id="dataNascimento" label="Data de Nascimento" type="date" value={formData.dataNascimento} onChange={handleChange} containerClassName="flex-[1]" disabled={true} />
+                  <FormField 
+                    id="email" 
+                    label="E-mail" 
+                    type="email" 
+                    value={formData.email} 
+                    onChange={handleChange} 
+                    containerClassName="flex-[2]"
+                    disabled={true}
+                  />
+                  <FormField 
+                    id="dataNascimento" 
+                    label="Data de Nascimento" 
+                    type="date" 
+                    value={formData.dataNascimento} 
+                    onChange={handleChange} 
+                    containerClassName="flex-[1]"
+                    disabled={true} 
+                  />
                 </div>
+                {/* Linha 3: Telefone e RA */}
                 <div className="flex flex-col md:flex-row gap-x-6 gap-y-4">
-                  <FormField id="telefone" label="Telefone" type="tel" value={formData.telefone} onChange={handleChange} containerClassName="flex-1" disabled={true} />
-                  <FormField id="ra" label="RA (Registro Acadêmico)" value={formData.ra} onChange={handleChange} containerClassName="flex-1" disabled={true} />
+                  <FormField 
+                    id="telefone" 
+                    label="Telefone" 
+                    type="tel" 
+                    value={formData.telefone} 
+                    onChange={handleChange} 
+                    containerClassName="flex-1"
+                    disabled={true} 
+                  />
+                  <FormField 
+                    id="ra" 
+                    label="RA (Registro Acadêmico)" 
+                    value={formData.ra} 
+                    onChange={handleChange} 
+                    containerClassName="flex-1"
+                    disabled={true}
+                  />
                 </div>
               </div>
             </section>
             
             <div className="flex justify-end mt-8">
-              <button type="submit" disabled={uploading || loading} className="bg-brand-dark-blue text-white font-bold py-3 px-10 rounded-full hover:bg-opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2">
+              <button 
+                type="submit" 
+                disabled={uploading || loading}
+                className="bg-brand-dark-blue text-white font-bold py-3 px-10 rounded-full hover:bg-opacity-90 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
                 {uploading ? 'SALVANDO...' : 'SALVAR FOTO'}
               </button>
             </div>
