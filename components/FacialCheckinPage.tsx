@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 // Declara a variável global `faceapi` para o TypeScript, já que ela é carregada por um script no HTML.
 declare const faceapi: any;
@@ -63,17 +64,38 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
   }, []);
 
   const getDescritorDoAlunoLogado = async () => {
-    const nomeAluno = "John Doe"; // Em um sistema real, isso viria do estado de autenticação
-    // FIX: Replaced expired Supabase URL with the new one provided.
-    const urlFotoCadastro = 'https://fnfybutkvsozbvvacomo.supabase.co/storage/v1/object/sign/selfies/download.jpeg?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8yMmMzZjIyZC04YzhiLTQyZGYtODM5Yy0wYzUzNDliMjJlZTIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJzZWxmaWVzL2Rvd25sb2FkLmpwZWciLCJpYXQiOjE3NjQwOTc1NjIsImV4cCI6MTc2NDcwMjM2Mn0.AU592WqeTAl9SVcsxlbwHhrR-fUd6UhMuLY0sx1LIv4';
-    
-    const img = await faceapi.fetchImage(urlFotoCadastro);
-    const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-    
-    if (!detection) {
-      throw new Error(`Não foi possível encontrar um rosto na imagem de cadastro de ${nomeAluno}.`);
+    // Pega o usuário logado na sessão atual
+    const { data: { user } } = await supabase.auth.getUser();
+  
+    if (!user) {
+      throw new Error("Nenhum usuário logado.");
     }
-    return detection.descriptor;
+  
+    // Define o caminho da foto. 
+    // Ajustado para .jpeg e removendo a pasta 'selfies/' do caminho
+    const caminhoDaFoto = `${user.id}.jpeg`; 
+  
+    // Pega a URL Pública (assumindo que o bucket 'selfies' é público)
+    const { data } = supabase.storage
+      .from('selfies')
+      .getPublicUrl(caminhoDaFoto);
+  
+    const urlFotoCadastro = data.publicUrl;
+  
+    console.log("Buscando foto de referência em:", urlFotoCadastro);
+  
+    try {
+      const img = await faceapi.fetchImage(urlFotoCadastro);
+      const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+  
+      if (!detection) {
+        throw new Error(`Não foi possível detectar um rosto na foto de cadastro.`);
+      }
+      return detection.descriptor;
+    } catch (err) {
+      console.error(err);
+      throw new Error("Erro ao carregar a foto de cadastro. O aluno possui uma selfie salva?");
+    }
   };
 
   const handleCheckin = async () => {
@@ -102,9 +124,9 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
         setStatusMessage('Nenhum rosto detectado. Posicione-se em frente à câmera.');
         setStatusColor('text-red-500');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setStatusMessage('Ocorreu um erro durante a verificação.');
+      setStatusMessage(error.message || 'Ocorreu um erro durante a verificação.');
       setStatusColor('text-red-500');
     } finally {
       setIsProcessing(false);
@@ -119,7 +141,7 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
           Check-in Facial
         </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-2">
-          Olá, <strong>John Doe</strong>! Olhe para a câmera e clique no botão para confirmar sua presença.
+          Olá! Olhe para a câmera e clique no botão para confirmar sua presença.
         </p>
       </div>
 
