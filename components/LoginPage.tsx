@@ -12,13 +12,60 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // --- FUNÇÃO ESPIÃ: Captura dados do acesso ---
+  const registrarLogAcesso = async (userId: string, userEmail: string) => {
+    try {
+      // 1. Identificar Dispositivo e Navegador (Básico)
+      const ua = navigator.userAgent;
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+      const dispositivo = isMobile ? 'Mobile' : 'Desktop';
+      
+      let navegador = 'Desconhecido';
+      if (ua.indexOf("Chrome") > -1) navegador = "Chrome";
+      else if (ua.indexOf("Safari") > -1) navegador = "Safari";
+      else if (ua.indexOf("Firefox") > -1) navegador = "Firefox";
+      else if (ua.indexOf("MSIE") > -1 || ua.indexOf("Trident/") > -1) navegador = "Internet Explorer";
+
+      // 2. Pegar IP e Localização (Usando API pública gratuita)
+      let ip = 'Desconhecido';
+      let localizacao = 'Desconhecido';
+      
+      try {
+        const response = await fetch('https://ipapi.co/json/');
+        const data = await response.json();
+        if (data.ip) {
+            ip = data.ip;
+            localizacao = `${data.city}, ${data.region_code} - ${data.country_name}`;
+        }
+      } catch (e) {
+        console.warn("Não foi possível obter localização precisa.");
+      }
+
+      // 3. Salvar no Supabase
+      await supabase.from('logs_acesso').insert({
+        aluno_id: userId, // ID do Auth
+        aluno_email: userEmail,
+        ip: ip,
+        localizacao: localizacao,
+        dispositivo: dispositivo,
+        navegador: navegador,
+        user_agent: ua
+      });
+
+    } catch (err) {
+      console.error("Erro silencioso ao registrar log:", err);
+      // Não travamos o login se o log falhar
+    }
+  };
+  // ---------------------------------------------
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
 
     try {
-      // 1. Tenta fazer o login no Auth
+      // 1. Autenticação
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email,
         password: password,
@@ -31,49 +78,39 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
             setErrorMsg(error.message);
         }
         setLoading(false);
-        return; // Para aqui se a senha estiver errada
+        return;
       }
 
-      // 2. VERIFICAÇÃO DE STATUS DA CONTA (SOFT DELETE)
+      // 2. Verificação de Segurança (Conta Ativa?)
       if (data.user) {
-        // Verifica na tabela 'alunos' se a conta está ativa
         const { data: alunoData, error: alunoError } = await supabase
           .from('alunos')
           .select('ativo')
           .eq('email', email)
           .single();
 
-        // Se encontrou o aluno e ele NÃO está ativo
-        if (alunoData && !alunoData.ativo) {
-           await supabase.auth.signOut(); // Desloga imediatamente
-           setErrorMsg('Acesso negado. Sua matrícula foi encerrada ou suspensa.');
+        // Se não achou ou não está ativo, chuta para fora
+        if (alunoError || !alunoData || !alunoData.ativo) {
+           await supabase.auth.signOut();
+           setErrorMsg('Acesso negado. Sua matrícula está inativa.');
            setLoading(false);
            return;
         }
-        
-        // Se der erro ao buscar (ex: não achou na tabela alunos mas existe no auth), 
-        // decidimos se bloqueamos ou deixamos passar. 
-        // Para segurança, se não achar registro de aluno ativo, é melhor bloquear.
-        if (alunoError || !alunoData) {
-           // Opcional: Se for um admin logando, essa lógica pode precisar de ajuste.
-           // Mas para alunos, se não tá na tabela 'alunos', não entra.
-           console.log("Usuário sem registro de aluno ativo.");
-        }
+
+        // 3. SUCESSO! -> Registra o Log antes de liberar
+        await registrarLogAcesso(data.user.id, email);
       }
 
     } catch (err) {
       setErrorMsg('Ocorreu um erro inesperado ao tentar entrar.');
       console.error(err);
     } finally {
-      // Se chegou aqui e não foi redirecionado pelo App.tsx (que ouve o onAuthStateChange),
-      // o estado de loading é desligado.
       setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row font-display">
-      {/* Estilos para a animação do gradiente */}
       <style>{`
         @keyframes gradientAnimation {
           0% { background-position: 0% 0%; }
@@ -93,7 +130,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
         }
       `}</style>
 
-      {/* Lado Esquerdo: Animado com Logo */}
       <div className="animated-gradient-bg w-full md:w-1/2 h-48 md:h-auto flex items-center justify-center p-8 shadow-lg z-10">
         <img 
           alt="Cursinho Comunitário Bonsucesso logo" 
@@ -102,7 +138,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
         />
       </div>
 
-      {/* Lado Direito: Formulário */}
       <div className="w-full md:w-1/2 flex items-center justify-center bg-[#f5f7fa] p-4 sm:p-8">
         <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 sm:p-10 border border-gray-100">
           
