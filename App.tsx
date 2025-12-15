@@ -27,13 +27,14 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
 
     // Rota definida no QR Code (/presenca?t=...)
-    // Verifica se o caminho é /presenca OU se existe o token na URL
-    if (path === '/presenca' || params.get('t')) {
+    // Verifica se o caminho termina com /presenca OU se existe o token na URL.
+    // Usamos endsWith para suportar o base: './' (ex: /app/presenca)
+    if (path.endsWith('/presenca') || params.get('t')) {
       return 'attendance_redirect';
     }
 
     // Mapeamento de rotas (caso o navegador tenha sido redirecionado)
-    if (path === '/checkin-facial') return 'facial_checkin';
+    if (path.endsWith('/checkin-facial')) return 'facial_checkin';
     
     // Padrão
     return 'home';
@@ -63,7 +64,7 @@ const App: React.FC = () => {
            if (prev === 'update_password') return 'update_password';
            if (prev === 'attendance_redirect') return 'attendance_redirect';
            // Se o usuário caiu no login vindo de um redirect de checkin facial, mandamos ele pra lá
-           if (window.location.pathname === '/checkin-facial') return 'facial_checkin';
+           if (window.location.pathname.endsWith('/checkin-facial')) return 'facial_checkin';
            
            return 'home';
         });
@@ -79,7 +80,8 @@ const App: React.FC = () => {
     setCurrentPage(page);
     // Opcional: Limpar a URL visualmente se navegar internamente
     if (page === 'home' && window.location.pathname !== '/') {
-        window.history.pushState({}, '', '/');
+        // Mantém o base path se existir
+        window.history.pushState({}, '', './');
     }
     window.scrollTo(0, 0);
   };
