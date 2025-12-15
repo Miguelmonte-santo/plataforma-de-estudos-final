@@ -26,8 +26,9 @@ const App: React.FC = () => {
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
 
-    // Se tem token na URL, vai para a página de redirecionamento intermediária
-    if (params.get('t')) {
+    // Rota definida no QR Code (/presenca?t=...)
+    // Verifica se o caminho é /presenca OU se existe o token na URL
+    if (path === '/presenca' || params.get('t')) {
       return 'attendance_redirect';
     }
 

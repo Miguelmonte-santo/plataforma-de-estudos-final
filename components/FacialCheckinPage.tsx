@@ -66,12 +66,33 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
     };
   }, []);
 
-  // --- FUNÇÃO ESPIÃ: Captura dados técnicos e Salva Presença ---
+  // --- FUNÇÃO BLINDADA: Espião + Validação de Token ---
   const registrarPresencaNoBanco = async (alunoId: string, email: string) => {
     try {
+      setStatusMessage('Validando QR Code...');
+
+      // 1. [NOVO] Busca o token (da URL ou do cache)
+      const token = sessionStorage.getItem('attendance_token') || new URLSearchParams(window.location.search).get('t');
+
+      if (!token) {
+        throw new Error("Token de chamada não encontrado. Escaneie o QR Code novamente.");
+      }
+
+      // 2. [NOVO] Verifica no banco se o token é válido e não expirou
+      const { data: tokenData, error: tokenError } = await supabase
+        .from('tokens_presenca')
+        .select('*')
+        .eq('token', token)
+        .gt('expires_at', new Date().toISOString()) // Data de expiração > Agora
+        .single();
+
+      if (tokenError || !tokenData) {
+        throw new Error("QR Code expirado! O professor gerou um novo código.");
+      }
+
       setStatusMessage('Registrando presença...');
       
-      // 1. Identificar Dispositivo e Navegador
+      // 3. Coleta dados do Espião (Igual você já tinha)
       const ua = navigator.userAgent;
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
       const dispositivo = isMobile ? 'Mobile' : 'Desktop';
@@ -81,7 +102,6 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
       else if (ua.indexOf("Safari") > -1) navegador = "Safari";
       else if (ua.indexOf("Firefox") > -1) navegador = "Firefox";
 
-      // 2. Pegar IP e Localização (API Gratuita)
       let ip = 'Desconhecido';
       let localizacao = 'Desconhecido';
       
@@ -96,36 +116,47 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
         console.warn("Sem localização precisa.");
       }
 
-      // 3. Salvar na tabela 'presencas'
+      // 4. Salva a Presença + Token Utilizado
       const { error } = await supabase.from('presencas').insert({
-        aluno_id: alunoId, // ID Oficial do Aluno (da tabela alunos)
+        aluno_id: alunoId,
         email: email,
         ip: ip,
         localizacao: localizacao,
         dispositivo: dispositivo,
         navegador: navegador,
-        user_agent: ua
+        user_agent: ua,
+        token_utilizado: token // <--- Importante para provar que ele usou o QR Code certo
       });
 
       if (error) throw error;
 
+      // 5. Limpa o token usado para não reusar
+      sessionStorage.removeItem('attendance_token');
+
       setStatusMessage('PRESENÇA CONFIRMADA! ✅');
       setStatusColor('text-green-600 font-bold');
       
-      // Toca um som de sucesso (opcional)
-      const audio = new Audio('https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg'); // Som genérico ou use um local
+      const audio = new Audio('https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg');
       audio.volume = 0.5;
       audio.play().catch(() => {});
 
-      // Espera 3 segundos e volta
       setTimeout(() => {
         onBack();
       }, 3000);
 
     } catch (err: any) {
       console.error("Erro ao salvar presença:", err);
-      setStatusMessage('Rosto validado, mas erro ao salvar registro.');
-      setStatusColor('text-orange-500');
+      // Se for erro de token, mostra mensagem clara
+      if (err.message && err.message.includes("QR Code")) {
+          setStatusMessage(err.message);
+          setStatusColor('text-red-600 font-bold');
+      } else if (err.message && err.message.includes("Token")) {
+          setStatusMessage(err.message);
+          setStatusColor('text-red-600 font-bold');
+      } else {
+          setStatusMessage('Erro ao registrar. Tente novamente.');
+          setStatusColor('text-orange-500');
+      }
     }
   };
   // -------------------------------------------------------------
