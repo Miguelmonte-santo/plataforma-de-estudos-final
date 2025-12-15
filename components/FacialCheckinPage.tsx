@@ -66,37 +66,41 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
     };
   }, []);
 
-  // --- FUNÇÃO BLINDADA ATUALIZADA ---
+  // --- FUNÇÃO BLINDADA (Versão Corrigida para Fuso Horário) ---
   const registrarPresencaNoBanco = async (alunoId: string, email: string) => {
     try {
       setStatusMessage('Validando QR Code...');
 
+      // 1. Pega o token da URL ou da Memória
       const token = sessionStorage.getItem('attendance_token') || new URLSearchParams(window.location.search).get('t');
 
       if (!token) {
-        throw new Error("Token não encontrado. Escaneie novamente.");
+        throw new Error("Token não encontrado na URL.");
       }
 
-      // 1. Busca o token SEM verificar a data no banco (para evitar erro de fuso horário na query)
+      console.log("Token sendo verificado:", token); // Log para debug
+
+      // 2. Busca o token no banco SEM filtrar por data (Isso resolve o problema do fuso horário)
       const { data: tokenData, error: tokenError } = await supabase
         .from('tokens_presenca')
         .select('*')
         .eq('token', token)
         .single();
 
-      // 2. Se não achou o token, aí sim é erro
       if (tokenError || !tokenData) {
-        console.error("Erro banco:", tokenError);
-        throw new Error("QR Code inválido ou não encontrado no sistema.");
+        console.error("Erro Supabase:", tokenError);
+        throw new Error("QR Code não encontrado no sistema. Tente novamente.");
       }
 
-      // 3. Verifica a data AGORA, no código, com tolerância
+      // 3. Validação de Tempo Manual (Mais segura)
       const expiresAt = new Date(tokenData.expires_at).getTime();
       const now = new Date().getTime();
       
-      // Se já passou do tempo de expiração
-      if (now > expiresAt) {
-         throw new Error("O QR Code expirou! Peça para o professor atualizar a tela.");
+      // Damos 30 segundos de tolerância extra para relógios dessincronizados
+      const toleracia = 30 * 1000; 
+
+      if (now > (expiresAt + toleracia)) {
+         throw new Error("O QR Code expirou! Peça um novo código.");
       }
 
       setStatusMessage('Registrando presença...');
@@ -125,6 +129,7 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
         console.warn("Sem localização precisa.");
       }
 
+      // 4. Salva a presença
       const { error } = await supabase.from('presencas').insert({
         aluno_id: alunoId,
         email: email,
@@ -136,8 +141,13 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
         token_utilizado: token
       });
 
-      if (error) throw error;
+      if (error) {
+          // Se der erro de chave duplicada (token já usado), avisa o usuário
+          if (error.code === '23505') throw new Error("Você já registrou presença com este código.");
+          throw error;
+      }
 
+      // Limpa o token usado
       sessionStorage.removeItem('attendance_token');
 
       setStatusMessage('PRESENÇA CONFIRMADA! ✅');
@@ -152,7 +162,7 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
       }, 3000);
 
     } catch (err: any) {
-      console.error("Erro presença:", err);
+      console.error("Erro final:", err);
       setStatusMessage(err.message || 'Erro ao registrar.');
       setStatusColor('text-red-600 font-bold');
     }
