@@ -8,56 +8,83 @@ interface Presenca {
   created_at: string;
   localizacao: string;
   dispositivo: string;
+  email: string; // Adicionado para tipagem correta
 }
 
 const AttendancePage: React.FC = () => {
   const [showCamera, setShowCamera] = useState(false);
   const [presencas, setPresencas] = useState<Presenca[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState<string | null>(null); // Mudamos de userId para userEmail
 
-  // Busca o histórico ao abrir a página
+  // 1. Busca Usuário e Histórico Inicial
   useEffect(() => {
-    fetchHistory();
+    const fetchUserAndHistory = async () => {
+      try {
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user && user.email) {
+          setUserEmail(user.email);
+          
+          // CORREÇÃO AQUI: Buscamos pelo EMAIL, não pelo ID
+          const { data, error } = await supabase
+            .from('presencas')
+            .select('*')
+            .eq('email', user.email) // <--- Alterado de aluno_id para email
+            .order('created_at', { ascending: false });
+
+          if (error) throw error;
+          if (data) setPresencas(data);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar histórico:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserAndHistory();
   }, []);
 
-  const fetchHistory = async () => {
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        const { data, error } = await supabase
-          .from('presencas')
-          .select('*')
-          .eq('aluno_id', user.id)
-          .order('created_at', { ascending: false }); // Mais recentes primeiro
+  // 2. Ativa o Realtime (Atualização Automática)
+  useEffect(() => {
+    if (!userEmail) return;
 
-        if (error) throw error;
-        if (data) setPresencas(data);
-      }
-    } catch (error) {
-      console.error('Erro ao buscar histórico:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const channel = supabase
+      .channel('presencas-aluno')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'presencas',
+          filter: `email=eq.${userEmail}`, // <--- CORREÇÃO: Filtro Realtime também pelo email
+        },
+        (payload) => {
+          console.log("Nova presença recebida:", payload);
+          const novaPresenca = payload.new as Presenca;
+          setPresencas((listaAtual) => [novaPresenca, ...listaAtual]);
+        }
+      )
+      .subscribe();
 
-  // Função chamada quando o aluno volta da câmera (para atualizar a lista)
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userEmail]); // Dependência agora é o email
+
   const handleBackFromCamera = () => {
     setShowCamera(false);
-    fetchHistory(); // <--- Recarrega a tabela para mostrar a presença nova!
   };
 
-  // Se a câmera estiver ativa, mostra o componente da câmera
   if (showCamera) {
     return <FacialCheckinPage onBack={handleBackFromCamera} />;
   }
 
-  // Se não, mostra o Botão + Tabela
   return (
     <div className="space-y-8 animate-fade-in p-2 md:p-4">
-      
-      {/* SEÇÃO 1: Botão de Registrar */}
+      {/* SEÇÃO 1: Botão de Registrar (Inalterado) */}
       <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm text-center border border-gray-100 dark:border-gray-700">
         <div className="mx-auto w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mb-4">
           <QrCode size={32} />
