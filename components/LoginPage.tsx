@@ -59,6 +59,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
   };
   // ---------------------------------------------
 
+  // [NOVO] Redirecionamento Inteligente pós-login
+  const checkPendingRedirect = () => {
+    const pendingToken = sessionStorage.getItem('attendance_token');
+    if (pendingToken) {
+        // Se tinha um token salvo, manda o aluno direto para a tela de check-in facial
+        // Ajustado para a rota '/checkin-facial' definida no App.tsx
+        window.location.href = `/checkin-facial?t=${pendingToken}`;
+    }
+    // Se não tiver token, o App.tsx detectará o login automaticamente e exibirá a Home
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -99,13 +110,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ onForgotPassword }) => {
 
         // 3. SUCESSO! -> Registra o Log antes de liberar
         await registrarLogAcesso(data.user.id, email);
+        
+        // 4. Verifica redirecionamento pendente
+        checkPendingRedirect();
       }
 
     } catch (err) {
       setErrorMsg('Ocorreu um erro inesperado ao tentar entrar.');
       console.error(err);
     } finally {
-      setLoading(false);
+      // Nota: Não setamos false aqui se deu sucesso, pois o redirect/reload vai acontecer
+      if (errorMsg) {
+          setLoading(false);
+      }
     }
   };
 

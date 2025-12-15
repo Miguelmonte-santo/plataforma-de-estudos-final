@@ -11,16 +11,33 @@ import Sidebar from './components/Sidebar';
 import LoginPage from './components/LoginPage';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
 import UpdatePasswordPage from './components/UpdatePasswordPage';
+import AttendanceRedirect from './components/AttendanceRedirect';
 import { supabase } from './lib/supabaseClient';
 
-type Page = 'home' | 'study_materials' | 'schedule' | 'profile' | 'attendance' | 'facial_checkin' | 'forgot_password' | 'update_password';
+type Page = 'home' | 'study_materials' | 'schedule' | 'profile' | 'attendance' | 'facial_checkin' | 'forgot_password' | 'update_password' | 'attendance_redirect';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
 
   // App Navigation State
-  const [currentPage, setCurrentPage] = useState<Page>('home');
+  // Inicializa baseado na URL para suportar redirecionamentos (Deep Linking básico)
+  const [currentPage, setCurrentPage] = useState<Page>(() => {
+    const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+
+    // Se tem token na URL, vai para a página de redirecionamento intermediária
+    if (params.get('t')) {
+      return 'attendance_redirect';
+    }
+
+    // Mapeamento de rotas (caso o navegador tenha sido redirecionado)
+    if (path === '/checkin-facial') return 'facial_checkin';
+    
+    // Padrão
+    return 'home';
+  });
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -39,12 +56,16 @@ const App: React.FC = () => {
       if (event === 'PASSWORD_RECOVERY') {
         setCurrentPage('update_password');
       } else if (event === 'SIGNED_IN') {
-        // Se acabamos de logar e NÃO é uma recuperação de senha, vamos para a home.
-        // O evento PASSWORD_RECOVERY é disparado antes de SIGNED_IN em alguns fluxos,
-        // então precisamos ter cuidado para não sobrescrever a página de atualização.
-        // Porém, normalmente em fluxos implícitos, o SIGNED_IN acontece. 
-        // Vamos checar se já não estamos na pagina de update.
-        setCurrentPage((prev) => prev === 'update_password' ? 'update_password' : 'home');
+        // Se acabamos de logar e NÃO é uma recuperação de senha, nem um redirect de chamada
+        // mantemos a lógica condicional.
+        setCurrentPage((prev) => {
+           if (prev === 'update_password') return 'update_password';
+           if (prev === 'attendance_redirect') return 'attendance_redirect';
+           // Se o usuário caiu no login vindo de um redirect de checkin facial, mandamos ele pra lá
+           if (window.location.pathname === '/checkin-facial') return 'facial_checkin';
+           
+           return 'home';
+        });
       } else if (event === 'SIGNED_OUT') {
         setCurrentPage('home'); // Reseta estado interno, mas a UI cairá no bloco !session
       }
@@ -55,6 +76,10 @@ const App: React.FC = () => {
 
   const navigateTo = (page: Page) => {
     setCurrentPage(page);
+    // Opcional: Limpar a URL visualmente se navegar internamente
+    if (page === 'home' && window.location.pathname !== '/') {
+        window.history.pushState({}, '', '/');
+    }
     window.scrollTo(0, 0);
   };
 
@@ -70,6 +95,10 @@ const App: React.FC = () => {
     }
   }, [isSidebarOpen]);
 
+  const onClose = () => {
+    setIsSidebarOpen(false);
+  }
+
   const handleNavigate = (page: Page) => {
     navigateTo(page);
     onClose();
@@ -81,10 +110,6 @@ const App: React.FC = () => {
     // onAuthStateChange will handle setting session to null
   };
 
-  const onClose = () => {
-    setIsSidebarOpen(false);
-  }
-
   // Loading Screen
   if (isLoadingSession) {
     return (
@@ -92,6 +117,12 @@ const App: React.FC = () => {
              <div className="animate-spin h-10 w-10 border-4 border-brand-dark-blue border-t-transparent rounded-full"></div>
         </div>
     );
+  }
+
+  // Rota especial: Redirect de Presença
+  // Deve ser verificada antes da sessão, pois ela mesma decide se manda para login ou não
+  if (currentPage === 'attendance_redirect') {
+    return <AttendanceRedirect />;
   }
 
   // Auth Logic for Pages that don't require session (Login, Forgot Password)

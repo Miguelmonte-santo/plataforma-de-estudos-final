@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-// Declara a variável global `faceapi`
+// Declaração global para a biblioteca que é carregada via CDN no index.html
 declare const faceapi: any;
 
 interface FacialCheckinPageProps {
@@ -19,19 +19,22 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
   useEffect(() => {
     const loadModelsAndStartVideo = async () => {
       try {
+        // Carrega os modelos de IA direto do GitHub (CDN)
         const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
         setStatusMessage('Carregando modelos de IA...');
+        
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
           faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
         ]);
+        
         setModelsLoaded(true);
         startVideo();
       } catch (error) {
         console.error("Erro ao carregar modelos:", error);
-        setStatusMessage('Erro ao carregar modelos de IA.');
+        setStatusMessage('Erro ao carregar sistema de IA.');
         setStatusColor('text-red-500');
       }
     };
@@ -44,11 +47,11 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
-        setStatusMessage('Aguardando verificação...');
+        setStatusMessage('Posicione o rosto no centro');
         setStatusColor('text-gray-500');
       } catch (err) {
-        console.error("Erro ao acessar a webcam:", err);
-        setStatusMessage('Não foi possível acessar a webcam. Verifique as permissões.');
+        console.error("Erro ao acessar webcam:", err);
+        setStatusMessage('Sem permissão de câmera.');
         setStatusColor('text-red-500');
       }
     };
@@ -56,89 +59,139 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
     loadModelsAndStartVideo();
 
     return () => {
+      // Limpeza: Desliga a câmera ao sair da tela
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
 
-  const getDescritorDoAlunoLogado = async () => {
-    // 1. Pega o usuário logado
-    const { data: { user } } = await supabase.auth.getUser();
-  
-    if (!user || !user.email) {
-      throw new Error("Nenhum usuário logado.");
-    }
-  
-    console.log("Buscando foto oficial para o email:", user.email);
+  // --- FUNÇÃO ESPIÃ: Captura dados técnicos e Salva Presença ---
+  const registrarPresencaNoBanco = async (alunoId: string, email: string) => {
+    try {
+      setStatusMessage('Registrando presença...');
+      
+      // 1. Identificar Dispositivo e Navegador
+      const ua = navigator.userAgent;
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+      const dispositivo = isMobile ? 'Mobile' : 'Desktop';
+      
+      let navegador = 'Desconhecido';
+      if (ua.indexOf("Chrome") > -1) navegador = "Chrome";
+      else if (ua.indexOf("Safari") > -1) navegador = "Safari";
+      else if (ua.indexOf("Firefox") > -1) navegador = "Firefox";
 
-    // 2. Busca a URL da foto OFICIAL na tabela 'alunos' (A "Matriz Biométrica")
-    // Usamos o email para vincular, pois é o dado comum entre Auth e Alunos
+      // 2. Pegar IP e Localização (API Gratuita)
+      let ip = 'Desconhecido';
+      let localizacao = 'Desconhecido';
+      
+      try {
+        const response = await fetch('https://ipapi.co/json/');
+        const data = await response.json();
+        if (data.ip) {
+            ip = data.ip;
+            localizacao = `${data.city}, ${data.region_code} - ${data.country_name}`;
+        }
+      } catch (e) {
+        console.warn("Sem localização precisa.");
+      }
+
+      // 3. Salvar na tabela 'presencas'
+      const { error } = await supabase.from('presencas').insert({
+        aluno_id: alunoId, // ID Oficial do Aluno (da tabela alunos)
+        email: email,
+        ip: ip,
+        localizacao: localizacao,
+        dispositivo: dispositivo,
+        navegador: navegador,
+        user_agent: ua
+      });
+
+      if (error) throw error;
+
+      setStatusMessage('PRESENÇA CONFIRMADA! ✅');
+      setStatusColor('text-green-600 font-bold');
+      
+      // Toca um som de sucesso (opcional)
+      const audio = new Audio('https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg'); // Som genérico ou use um local
+      audio.volume = 0.5;
+      audio.play().catch(() => {});
+
+      // Espera 3 segundos e volta
+      setTimeout(() => {
+        onBack();
+      }, 3000);
+
+    } catch (err: any) {
+      console.error("Erro ao salvar presença:", err);
+      setStatusMessage('Rosto validado, mas erro ao salvar registro.');
+      setStatusColor('text-orange-500');
+    }
+  };
+  // -------------------------------------------------------------
+
+  const getDescritorDoAlunoLogado = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !user.email) throw new Error("Usuário não logado.");
+  
+    // Busca a foto OFICIAL na tabela 'alunos'
     const { data: alunoData, error } = await supabase
       .from('alunos')
-      .select('foto_rosto_url')
+      .select('id, foto_rosto_url') // Pega o ID também
       .eq('email', user.email)
       .single();
 
     if (error || !alunoData || !alunoData.foto_rosto_url) {
-      console.error("Erro Supabase:", error);
-      throw new Error("Foto de matrícula não encontrada. Entre em contato com a secretaria.");
+      throw new Error("Foto de matrícula não encontrada.");
     }
   
-    const urlFotoCadastro = alunoData.foto_rosto_url;
-    console.log("Foto de referência encontrada:", urlFotoCadastro);
+    // Baixa a imagem e calcula o descritor facial
+    const img = await faceapi.fetchImage(alunoData.foto_rosto_url);
+    const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
   
-    try {
-      // 3. Baixa a imagem e calcula o descritor facial
-      // O 'crossOrigin' é importante para imagens vindas do Supabase Storage
-      const img = await faceapi.fetchImage(urlFotoCadastro);
-      const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-  
-      if (!detection) {
-        throw new Error(`Não foi possível detectar um rosto na foto de cadastro (Matrícula).`);
-      }
-      return detection.descriptor;
-    } catch (err: any) {
-      console.error(err);
-      throw new Error("Erro ao processar a foto de cadastro: " + err.message);
-    }
+    if (!detection) throw new Error(`Rosto não detectado na foto de cadastro.`);
+    
+    return { 
+        descriptor: detection.descriptor,
+        alunoId: alunoData.id,
+        email: user.email 
+    };
   };
 
   const handleCheckin = async () => {
     if (!videoRef.current) return;
     
     setIsProcessing(true);
-    setStatusMessage('Processando...');
-    setStatusColor('text-orange-500');
+    setStatusMessage('Analisando biometria...');
+    setStatusColor('text-indigo-600');
 
     try {
-      // 1. Busca a assinatura facial da foto oficial
-      const descritorSalvo = await getDescritorDoAlunoLogado();
+      // 1. Pega a assinatura facial oficial
+      const dadosAluno = await getDescritorDoAlunoLogado();
       
       // 2. Lê o rosto da webcam agora
       const descritorWebcam = await faceapi.detectSingleFace(videoRef.current).withFaceLandmarks().withFaceDescriptor();
 
       if (descritorWebcam) {
-        // 3. Compara os dois
-        const distancia = faceapi.euclideanDistance(descritorSalvo, descritorWebcam.descriptor);
-        console.log("Distância Euclidiana (Diferença):", distancia);
+        // 3. Compara
+        const distancia = faceapi.euclideanDistance(dadosAluno.descriptor, descritorWebcam.descriptor);
+        console.log("Distância Biométrica:", distancia);
         
-        // Limiar de 0.6 é o padrão da biblioteca. Menor = Mais parecido.
+        // Limiar: < 0.6 = Mesma pessoa
         if (distancia < 0.6) {
-          setStatusMessage('Identidade confirmada! Presença registrada.');
-          setStatusColor('text-green-500');
-          // TODO: Chamar função para salvar o registro na tabela 'presencas'
+           // SUCESSO! Agora registra no banco com os dados espiões
+           await registrarPresencaNoBanco(dadosAluno.alunoId, dadosAluno.email);
         } else {
-          setStatusMessage('Rosto não corresponde ao cadastro. Tente novamente.');
-          setStatusColor('text-red-500');
+          setStatusMessage('Rosto não corresponde ao aluno matriculado. ❌');
+          setStatusColor('text-red-600 font-bold');
         }
       } else {
-        setStatusMessage('Nenhum rosto detectado. Posicione-se em frente à câmera.');
+        setStatusMessage('Nenhum rosto encontrado na câmera.');
         setStatusColor('text-red-500');
       }
     } catch (error: any) {
       console.error(error);
-      setStatusMessage(error.message || 'Ocorreu um erro durante a verificação.');
+      setStatusMessage(error.message || 'Erro na verificação.');
       setStatusColor('text-red-500');
     } finally {
       setIsProcessing(false);
@@ -146,42 +199,55 @@ const FacialCheckinPage: React.FC<FacialCheckinPageProps> = ({ onBack }) => {
   };
 
   return (
-    <section className="flex flex-col items-center w-full">
-      <div className="text-center mb-6">
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 dark:text-white flex items-center justify-center gap-3">
-          <span className="material-icons-outlined text-indigo-500 !text-4xl" aria-hidden="true">camera_alt</span>
+    <section className="flex flex-col items-center w-full min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+      <div className="text-center mb-6 mt-4">
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center justify-center gap-3">
+          <span className="material-icons-outlined text-indigo-500 !text-4xl">face</span>
           Check-in Facial
         </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-2">
-          Validação biométrica com base na sua foto de matrícula.
+          Validação biométrica para registro de presença.
         </p>
       </div>
 
-      <div className="relative w-full max-w-2xl aspect-video bg-gray-900 rounded-lg shadow-lg overflow-hidden border-4 border-gray-300 dark:border-gray-700 mb-6">
-        <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline></video>
+      <div className="relative w-full max-w-2xl aspect-video bg-black rounded-xl shadow-2xl overflow-hidden border-4 border-indigo-100 dark:border-indigo-900 mb-6">
+        <video 
+            ref={videoRef} 
+            className="w-full h-full object-cover transform scale-x-[-1]" // Espelha o vídeo
+            autoPlay 
+            muted 
+            playsInline
+        ></video>
+        
+        {/* Overlay de Guia */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-30">
+            <div className="w-64 h-80 border-4 border-white rounded-full border-dashed"></div>
+        </div>
       </div>
       
-      <div className="flex flex-col items-center gap-4 w-full max-w-2xl">
+      <div className="flex flex-col items-center gap-4 w-full max-w-md">
+        <div className={`text-xl font-bold text-center py-2 px-4 rounded-lg w-full transition-colors bg-white dark:bg-gray-800 shadow-sm ${statusColor}`}>
+          {statusMessage}
+        </div>
+
         <button
           onClick={handleCheckin}
           disabled={!modelsLoaded || isProcessing}
-          className="w-full bg-brand-dark-blue text-white font-bold py-3 px-10 rounded-full hover:bg-opacity-90 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full bg-indigo-600 text-white font-bold py-4 px-6 rounded-xl hover:bg-indigo-700 transition-all disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg transform active:scale-95"
         >
           {isProcessing 
-            ? <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span> 
-            : <span className="material-icons-outlined !text-2xl">fingerprint</span>
+            ? <span className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full"></span> 
+            : <span className="material-icons-outlined !text-3xl">fingerprint</span>
           }
-          CONFIRMAR PRESENÇA
+          <span className="text-lg">CONFIRMAR PRESENÇA</span>
         </button>
+        
         <button
           onClick={onBack}
-          className="w-full sm:w-auto text-sm text-gray-600 dark:text-gray-400 hover:underline"
+          className="w-full py-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
         >
-          Voltar para Presenças
+          Cancelar e Voltar
         </button>
-        <div className={`text-lg font-semibold text-center h-8 transition-colors ${statusColor}`}>
-          {statusMessage}
-        </div>
       </div>
     </section>
   );
